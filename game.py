@@ -4,8 +4,13 @@ import random
 import mediapipe as mp
 import math
 import numpy as np
+import pygame
 
-# Initialize MediaPipe Hands
+pygame.mixer.init()
+
+slice_sound = pygame.mixer.Sound("audio/slice.mp3")
+game_over_sound = pygame.mixer.Sound("audio/gameover.mp3")
+
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
@@ -14,58 +19,77 @@ hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_c
 # Game variables
 curr_Frame = 0
 prev_Frame = 0
-delta_time = 0
 next_Time_to_Spawn = 0
 Speed = [0, 5]
-Fruit_Size = 30
+Fruit_Size = 64  
 Spawn_Rate = 1
 Score = 0
 Lives = 15
 Difficulty_level = 1
 game_Over = False
-slash = np.array([[]], np.int32)
 slash_Color = (255, 255, 255)
 slash_length = 19
-w = h = 0
 Fruits = []
 
+# Load and resize fruit images
+fruit_images = {
+    "apple": cv2.imread("icon/red-apple.png"),
+    "banana": cv2.imread("icon/banana.png"),
+    "orange": cv2.imread("icon/tangerine.png"),
+}
+
+# Resize fruit images to Fruit_Size
+for key in fruit_images:
+    fruit_images[key] = cv2.resize(fruit_images[key], (Fruit_Size, Fruit_Size))
+
 def Spawn_Fruits():
-    fruit = {}
+    fruit_type = random.choice(list(fruit_images.keys()))
+    fruit_image = fruit_images[fruit_type]
     random_x = random.randint(15, 600)
-    random_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-    fruit["Color"] = random_color
-    fruit["Curr_position"] = [random_x, 440]
-    fruit["Next_position"] = [0, 0]
-    Fruits.append(fruit)
+    Fruits.append({
+        "Image": fruit_image,
+        "Curr_position": [random_x, 440],
+        "Size": fruit_image.shape[:2]  # Get the size of the image
+    })
 
 def Fruit_Movement(Fruits, speed):
     global Lives
+    fruits_to_remove = []  # List to collect fruits to remove
     for fruit in Fruits:
-        if (fruit["Curr_position"][1]) < 20 or (fruit["Curr_position"][0]) > 650:
-            Lives -= 1
-            Fruits.remove(fruit)
-        cv2.circle(img, tuple(fruit["Curr_position"]), Fruit_Size, fruit["Color"], -1)
-        fruit["Next_position"][0] = fruit["Curr_position"][0] + speed[0]
-        fruit["Next_position"][1] = fruit["Curr_position"][1] - speed[1]
-        fruit["Curr_position"] = fruit["Next_position"]
+        # Update fruit position
+        fruit["Curr_position"][0] += speed[0]
+        fruit["Curr_position"][1] -= speed[1]
+
+        # Get current position
+        img_position = (int(fruit["Curr_position"][0]), int(fruit["Curr_position"][1]))
+
+        # Check if the fruit is out of bounds
+        if (img_position[1] < 0 or img_position[0] < 0 or
+            img_position[0] + Fruit_Size > img.shape[1] or
+            img_position[1] + Fruit_Size > img.shape[0]):
+            if fruit["Curr_position"][1] < 20 or fruit["Curr_position"][0] > 650:
+                Lives -= 1
+                fruits_to_remove.append(fruit)  
+            continue  
+
+        # Draw the fruit image
+        img[img_position[1]:img_position[1] + Fruit_Size, img_position[0]:img_position[0] + Fruit_Size] = fruit["Image"]
+
+    # Remove collected fruits
+    for fruit in fruits_to_remove:
+        Fruits.remove(fruit)
 
 def distance(a, b):
     return int(math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2))
 
-# Function to display the game menu
 def show_menu():
     while True:
-        menu_img = np.zeros((720, 1280, 3), dtype=np.uint8)  # Adjusted for full HD resolution
+        menu_img = np.zeros((720, 1280, 3), dtype=np.uint8)
         cv2.putText(menu_img, "FRUIT CUT GAME", (380, 100), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 255), 3, cv2.LINE_AA)
         cv2.putText(menu_img, "Press 'S' to Start", (420, 300), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(menu_img, "Press 'Q' to Quit", (420, 350), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(menu_img, "TEAM :", (500, 450), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(menu_img, "ADITYA UPRETI", (420, 520), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(menu_img, "ASHUTOSH PANDEY", (420, 570), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(menu_img, "SHUBHAM YADAV", (420, 620), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
 
         cv2.imshow("img", menu_img)
-
         key = cv2.waitKey(10)
         if key == ord('s'):
             break
@@ -73,13 +97,10 @@ def show_menu():
             cv2.destroyAllWindows()
             exit()
 
-# Show the menu before starting the game
 show_menu()
 
-# Set up the video capture
 cap = cv2.VideoCapture(0)
 
-# Set full screen
 cv2.namedWindow("img", cv2.WND_PROP_FULLSCREEN)
 cv2.setWindowProperty("img", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
@@ -100,20 +121,19 @@ while cap.isOpened():
                                        mp_drawing_styles.get_default_hand_landmarks_style(),
                                        mp_drawing_styles.get_default_hand_connections_style())
             for id, lm in enumerate(hand_landmarks.landmark):
-                if id == 8:
+                if id == 8:  
                     index_pos = (int(lm.x * w), int(lm.y * h))
-                    cv2.circle(img, index_pos, 18, slash_Color, -1)
-                    slash = np.append(slash, index_pos)
-
-                    while len(slash) >= slash_length:
-                        slash = np.delete(slash, len(slash) - slash_length, 0)
-
+                    fruits_to_remove = []  
                     for fruit in Fruits:
                         d = distance(index_pos, fruit["Curr_position"])
-                        if (d < Fruit_Size):
+                        if d < Fruit_Size:
                             Score += 100
-                            slash_Color = fruit["Color"]
-                            Fruits.remove(fruit)
+                            slice_sound.play()  
+                            fruits_to_remove.append(fruit)  
+
+                    # Remove collected fruits
+                    for fruit in fruits_to_remove:
+                        Fruits.remove(fruit)
 
     if Score % 1000 == 0 and Score != 0:
         Difficulty_level = int(Score / 1000) + 1
@@ -123,9 +143,6 @@ while cap.isOpened():
 
     if Lives <= 0:
         game_Over = True
-
-    slash = slash.reshape((-1, 1, 2))
-    cv2.polylines(img, [slash], False, slash_Color, 15, 0)
 
     curr_Frame = time.time()
     delta_Time = curr_Frame - prev_Frame
@@ -143,6 +160,7 @@ while cap.isOpened():
             next_Time_to_Spawn = time.time() + (1 / Spawn_Rate)
         Fruit_Movement(Fruits, Speed)
     else:
+        game_over_sound.play()  
         cv2.putText(img, "GAME OVER", (int(w * 0.1), int(h * 0.6)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
         Fruits.clear()
 
