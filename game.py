@@ -6,11 +6,14 @@ import math
 import numpy as np
 import pygame
 
+# Initialize Pygame mixer for sound effects
 pygame.mixer.init()
 
+# Load sound effects
 slice_sound = pygame.mixer.Sound("audio/slice.mp3")
 game_over_sound = pygame.mixer.Sound("audio/gameover.mp3")
 
+# Initialize MediaPipe Hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
@@ -21,15 +24,14 @@ curr_Frame = 0
 prev_Frame = 0
 next_Time_to_Spawn = 0
 Speed = [0, 5]
-Fruit_Size = 64  
+Fruit_Size = 64  # Set the size of the fruit
 Spawn_Rate = 1
 Score = 0
 Lives = 15
 Difficulty_level = 1
 game_Over = False
-slash_Color = (255, 255, 255)
-slash_length = 19
-Fruits = []
+slicing_effects = []
+Fruits = []# List to hold slicing effects
 
 # Load and resize fruit images
 fruit_images = {
@@ -49,7 +51,8 @@ def Spawn_Fruits():
     Fruits.append({
         "Image": fruit_image,
         "Curr_position": [random_x, 440],
-        "Size": fruit_image.shape[:2]  # Get the size of the image
+        "Size": fruit_image.shape[:2],  # Get the size of the image
+        "Type": fruit_type
     })
 
 def Fruit_Movement(Fruits, speed):
@@ -69,8 +72,8 @@ def Fruit_Movement(Fruits, speed):
             img_position[1] + Fruit_Size > img.shape[0]):
             if fruit["Curr_position"][1] < 20 or fruit["Curr_position"][0] > 650:
                 Lives -= 1
-                fruits_to_remove.append(fruit)  
-            continue  
+                fruits_to_remove.append(fruit)  # Collect fruit to remove
+            continue  # Skip drawing if out of bounds
 
         # Draw the fruit image
         img[img_position[1]:img_position[1] + Fruit_Size, img_position[0]:img_position[0] + Fruit_Size] = fruit["Image"]
@@ -97,10 +100,38 @@ def show_menu():
             cv2.destroyAllWindows()
             exit()
 
+# Slicing Effect Class
+class SlicingEffect:
+    def __init__(self, position, fruit_type):
+        self.position = position
+        self.fruit_type = fruit_type
+        self.split_offset = 20  # Offset for the split effect
+        self.duration = 0.3  # Duration of the effect
+        self.start_time = time.time()
+
+    def draw(self, img):
+        elapsed = time.time() - self.start_time
+        if elapsed < self.duration:
+            x, y = self.position
+            # Draw two halves of the fruit
+            fruit_half = fruit_images[self.fruit_type]
+            left_half = cv2.flip(fruit_half[:, :Fruit_Size//2], 1)
+            right_half = fruit_half[:, Fruit_Size//2:]
+
+            # Move the halves apart
+            left_x = x - self.split_offset * (elapsed / self.duration)
+            right_x = x + self.split_offset * (elapsed / self.duration)
+
+            img[y:y + Fruit_Size, int(left_x):int(left_x) + Fruit_Size//2] = left_half
+            img[y:y + Fruit_Size, int(right_x):int(right_x) + Fruit_Size//2] = right_half
+
+# Show the menu before starting the game
 show_menu()
 
+# Set up the video capture
 cap = cv2.VideoCapture(0)
 
+# Set full screen
 cv2.namedWindow("img", cv2.WND_PROP_FULLSCREEN)
 cv2.setWindowProperty("img", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
@@ -121,19 +152,27 @@ while cap.isOpened():
                                        mp_drawing_styles.get_default_hand_landmarks_style(),
                                        mp_drawing_styles.get_default_hand_connections_style())
             for id, lm in enumerate(hand_landmarks.landmark):
-                if id == 8:  
+                if id == 8:  # Index finger tip
                     index_pos = (int(lm.x * w), int(lm.y * h))
-                    fruits_to_remove = []  
+                    fruits_to_remove = []  # List to collect fruits to remove
                     for fruit in Fruits:
                         d = distance(index_pos, fruit["Curr_position"])
                         if d < Fruit_Size:
                             Score += 100
-                            slice_sound.play()  
-                            fruits_to_remove.append(fruit)  
+                            slice_sound.play()  # Play slicing sound
+                            fruits_to_remove.append(fruit)  # Collect fruit to remove
+                            slicing_effects.append(SlicingEffect(fruit["Curr_position"], fruit["Type"]))  # Add slicing effect
 
                     # Remove collected fruits
                     for fruit in fruits_to_remove:
-                        Fruits.remove(fruit)
+                        Fruits[:] = [f for f in Fruits if f["Curr_position"] != fruit["Curr_position"]]
+
+    # Draw slicing effects
+    for effect in slicing_effects:
+        effect.draw(img)
+
+    # Clear effects that have finished
+    slicing_effects = [effect for effect in slicing_effects if time.time() - effect.start_time < effect.duration]
 
     if Score % 1000 == 0 and Score != 0:
         Difficulty_level = int(Score / 1000) + 1
@@ -160,7 +199,7 @@ while cap.isOpened():
             next_Time_to_Spawn = time.time() + (1 / Spawn_Rate)
         Fruit_Movement(Fruits, Speed)
     else:
-        game_over_sound.play()  
+        game_over_sound.play()  # Play game over sound
         cv2.putText(img, "GAME OVER", (int(w * 0.1), int(h * 0.6)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
         Fruits.clear()
 
