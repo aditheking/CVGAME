@@ -5,16 +5,16 @@ import mediapipe as mp
 import math
 import numpy as np
 
+# Initialize MediaPipe Hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
-
 hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.5)
 
+# Game variables
 curr_Frame = 0
 prev_Frame = 0
 delta_time = 0
-
 next_Time_to_Spawn = 0
 Speed = [0, 5]
 Fruit_Size = 30
@@ -23,59 +23,67 @@ Score = 0
 Lives = 15
 Difficulty_level = 1
 game_Over = False
-
 slash = np.array([[]], np.int32)
 slash_Color = (255, 255, 255)
 slash_length = 19
-
 w = h = 0
-
 Fruits = []
-
 
 def Spawn_Fruits():
     fruit = {}
     random_x = random.randint(15, 600)
     random_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-    # cv2.circle(img,(random_x,440),Fruit_Size,random_color,-1)
     fruit["Color"] = random_color
     fruit["Curr_position"] = [random_x, 440]
     fruit["Next_position"] = [0, 0]
     Fruits.append(fruit)
 
-
 def Fruit_Movement(Fruits, speed):
     global Lives
-
     for fruit in Fruits:
         if (fruit["Curr_position"][1]) < 20 or (fruit["Curr_position"][0]) > 650:
-            Lives = Lives - 1
-            # print(Lives)
-            print("removed ", fruit)
+            Lives -= 1
             Fruits.remove(fruit)
-
         cv2.circle(img, tuple(fruit["Curr_position"]), Fruit_Size, fruit["Color"], -1)
-        fruit["Next_position"][0] = fruit["Curr_position"][0] + speed[0]  # + speed[0] #* delta_time
-        fruit["Next_position"][1] = fruit["Curr_position"][1] - speed[1]  # * delta_time
-
+        fruit["Next_position"][0] = fruit["Curr_position"][0] + speed[0]
+        fruit["Next_position"][1] = fruit["Curr_position"][1] - speed[1]
         fruit["Curr_position"] = fruit["Next_position"]
 
-        # print(len(Fruits))
-
-
 def distance(a, b):
-    x1 = a[0]
-    y1 = a[1]
+    return int(math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2))
 
-    x2 = b[0]
-    y2 = b[1]
+# Function to display the game menu
+def show_menu():
+    while True:
+        menu_img = np.zeros((720, 1280, 3), dtype=np.uint8)  # Adjusted for full HD resolution
+        cv2.putText(menu_img, "FRUIT CUT GAME", (380, 100), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 255), 3, cv2.LINE_AA)
+        cv2.putText(menu_img, "Press 'S' to Start", (420, 300), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(menu_img, "Press 'Q' to Quit", (420, 350), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(menu_img, "TEAM :", (500, 450), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(menu_img, "ADITYA UPRETI", (420, 520), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(menu_img, "ASHUTOSH PANDEY", (420, 570), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(menu_img, "SHUBHAM YADAV", (420, 620), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
 
-    d = math.sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2))
-    return int(d)
+        cv2.imshow("img", menu_img)
 
+        key = cv2.waitKey(10)
+        if key == ord('s'):
+            break
+        elif key == ord('q'):
+            cv2.destroyAllWindows()
+            exit()
 
+# Show the menu before starting the game
+show_menu()
+
+# Set up the video capture
 cap = cv2.VideoCapture(0)
-while (cap.isOpened()):
+
+# Set full screen
+cv2.namedWindow("img", cv2.WND_PROP_FULLSCREEN)
+cv2.setWindowProperty("img", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+while cap.isOpened():
     success, img = cap.read()
     if not success:
         print("skipping frame")
@@ -88,20 +96,13 @@ while (cap.isOpened()):
 
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                img,
-                hand_landmarks,
-                mp_hands.HAND_CONNECTIONS,
-                mp_drawing_styles.get_default_hand_landmarks_style(),
-                mp_drawing_styles.get_default_hand_connections_style())
-
-            # **************************************************************************************
+            mp_drawing.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS,
+                                       mp_drawing_styles.get_default_hand_landmarks_style(),
+                                       mp_drawing_styles.get_default_hand_connections_style())
             for id, lm in enumerate(hand_landmarks.landmark):
                 if id == 8:
                     index_pos = (int(lm.x * w), int(lm.y * h))
-                    # print("slash",slash_Color)
                     cv2.circle(img, index_pos, 18, slash_Color, -1)
-                    # slash=np.delete(slash,0)
                     slash = np.append(slash, index_pos)
 
                     while len(slash) >= slash_length:
@@ -109,28 +110,18 @@ while (cap.isOpened()):
 
                     for fruit in Fruits:
                         d = distance(index_pos, fruit["Curr_position"])
-                        cv2.putText(img, str(d), fruit["Curr_position"], cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 0), 2, 3)
                         if (d < Fruit_Size):
-                            Score = Score + 100
-
+                            Score += 100
                             slash_Color = fruit["Color"]
-
                             Fruits.remove(fruit)
 
-            # ***********************************************************************************************************
-
     if Score % 1000 == 0 and Score != 0:
-        Difficulty_level = (Score / 1000) + 1
-        Difficulty_level = int(Difficulty_level)
-        print(Difficulty_level)
+        Difficulty_level = int(Score / 1000) + 1
         Spawn_Rate = Difficulty_level * 4 / 5
         Speed[0] = Speed[0] * Difficulty_level
         Speed[1] = int(5 * Difficulty_level / 2)
-        print(Speed)
 
-    # *****************************************************************************
-
-    if (Lives <= 0):
+    if Lives <= 0:
         game_Over = True
 
     slash = slash.reshape((-1, 1, 2))
@@ -141,27 +132,19 @@ while (cap.isOpened()):
     FPS = int(1 / delta_Time)
     cv2.putText(img, "FPS : " + str(FPS), (int(w * 0.82), 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 250, 0), 2)
     cv2.putText(img, "Score: " + str(Score), (int(w * 0.35), 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 5)
-    cv2.putText(img, "Level: " + str(Difficulty_level), (int(w * 0.01), 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 150),
-                5)
-    cv2.putText(img,"Lives remaining : " + str(Lives), (200, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-
+    cv2.putText(img, "Level: " + str(Difficulty_level), (int(w * 0.01), 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 150), 5)
+    cv2.putText(img, "Lives remaining : " + str(Lives), (200, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
     prev_Frame = curr_Frame
 
-    # ***********************************************************
-    if not (game_Over):
-        if (time.time() > next_Time_to_Spawn):  # and not (game_Over):
+    if not game_Over:
+        if time.time() > next_Time_to_Spawn:
             Spawn_Fruits()
             next_Time_to_Spawn = time.time() + (1 / Spawn_Rate)
-
         Fruit_Movement(Fruits, Speed)
-
-
     else:
         cv2.putText(img, "GAME OVER", (int(w * 0.1), int(h * 0.6)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
         Fruits.clear()
-
-    #cv2.putText(img, "Lives remaining : " + str(Lives), (200, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
     cv2.imshow("img", img)
 
