@@ -17,7 +17,8 @@ game_over_sound = pygame.mixer.Sound("audio/gameover.mp3")
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.5)
+hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7,
+                       min_tracking_confidence=0.5)
 
 # Game variables
 curr_Frame = 0
@@ -31,18 +32,26 @@ Lives = 15
 Difficulty_level = 1
 game_Over = False
 slicing_effects = []
-Fruits = []# List to hold slicing effects
+Fruits = []  # List to hold slicing effects
 
 # Load and resize fruit images
 fruit_images = {
-    "apple": cv2.imread("icon/red-apple.png"),
-    "banana": cv2.imread("icon/banana.png"),
-    "orange": cv2.imread("icon/tangerine.png"),
+    "apple": cv2.imread("icon/red-apple.png", cv2.IMREAD_UNCHANGED),
+    "banana": cv2.imread("icon/banana.png", cv2.IMREAD_UNCHANGED),
+    "orange": cv2.imread("icon/tangerine.png", cv2.IMREAD_UNCHANGED),
 }
 
 # Resize fruit images to Fruit_Size
 for key in fruit_images:
     fruit_images[key] = cv2.resize(fruit_images[key], (Fruit_Size, Fruit_Size))
+
+# Load background image
+background_img = cv2.imread("background.jpeg")
+if background_img is None:
+    print("Error: Could not load background image. Check the path.")
+    exit()
+background_img = cv2.resize(background_img, (1280, 720))  # Resize to fit the window
+
 
 def Spawn_Fruits():
     fruit_type = random.choice(list(fruit_images.keys()))
@@ -55,7 +64,8 @@ def Spawn_Fruits():
         "Type": fruit_type
     })
 
-def Fruit_Movement(Fruits, speed):
+
+def Fruit_Movement(Fruits, speed, img):
     global Lives
     fruits_to_remove = []  # List to collect fruits to remove
     for fruit in Fruits:
@@ -68,29 +78,41 @@ def Fruit_Movement(Fruits, speed):
 
         # Check if the fruit is out of bounds
         if (img_position[1] < 0 or img_position[0] < 0 or
-            img_position[0] + Fruit_Size > img.shape[1] or
-            img_position[1] + Fruit_Size > img.shape[0]):
+                img_position[0] + Fruit_Size > img.shape[1] or
+                img_position[1] + Fruit_Size > img.shape[0]):
             if fruit["Curr_position"][1] < 20 or fruit["Curr_position"][0] > 650:
                 Lives -= 1
                 fruits_to_remove.append(fruit)  # Collect fruit to remove
             continue  # Skip drawing if out of bounds
 
         # Draw the fruit image
-        img[img_position[1]:img_position[1] + Fruit_Size, img_position[0]:img_position[0] + Fruit_Size] = fruit["Image"]
+        img[img_position[1]:img_position[1] + Fruit_Size, img_position[0]:img_position[0] + Fruit_Size] = fruit["Image"][:, :, :3]
 
     # Remove collected fruits
     for fruit in fruits_to_remove:
         Fruits.remove(fruit)
 
+
 def distance(a, b):
     return int(math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2))
+
 
 def show_menu():
     while True:
         menu_img = np.zeros((720, 1280, 3), dtype=np.uint8)
-        cv2.putText(menu_img, "FRUIT CUT GAME", (380, 100), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 255), 3, cv2.LINE_AA)
-        cv2.putText(menu_img, "Press 'S' to Start", (420, 300), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(menu_img, "Press 'Q' to Quit", (420, 350), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(menu_img, "FRUIT CUT GAME", (380, 100), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 255), 3,
+                    cv2.LINE_AA)
+        cv2.putText(menu_img, "Press 'S' to Start", (420, 300), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2,
+                    cv2.LINE_AA)
+        cv2.putText(menu_img, "Press 'Q' to Quit", (420, 350), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2,
+                    cv2.LINE_AA)
+        cv2.putText(menu_img, "TEAM :", (500, 450), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(menu_img, "ADITYA UPRETI", (420, 520), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2,
+                    cv2.LINE_AA)
+        cv2.putText(menu_img, "ASHUTOSH PANDEY", (420, 570), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2,
+                    cv2.LINE_AA)
+        cv2.putText(menu_img, "SHUBHAM YADAV", (420, 620), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2,
+                    cv2.LINE_AA)
 
         cv2.imshow("img", menu_img)
         key = cv2.waitKey(10)
@@ -99,6 +121,28 @@ def show_menu():
         elif key == ord('q'):
             cv2.destroyAllWindows()
             exit()
+
+
+# Function to blend images with transparency
+def blend_images(background, overlay, position):
+    x, y = position
+    h, w = overlay.shape[:2]
+
+    # Ensure the overlay fits within the background
+    if y + h > background.shape[0] or x + w > background.shape[1]:
+        return
+
+    # Get the alpha channel
+    if overlay.shape[2] == 4:  # Check if there's an alpha channel
+        alpha_channel = overlay[:, :, 3] / 255.0
+        overlay = overlay[:, :, :3]  # Remove the alpha channel for blending
+    else:
+        alpha_channel = np.ones((h, w))  # No transparency
+
+    # Blend images
+    for c in range(3):
+        background[y:y + h, x:x + w, c] = (alpha_channel * overlay[:, :, c] +
+                                             (1 - alpha_channel) * background[y:y + h, x:x + w, c])
 
 # Slicing Effect Class
 class SlicingEffect:
@@ -115,15 +159,17 @@ class SlicingEffect:
             x, y = self.position
             # Draw two halves of the fruit
             fruit_half = fruit_images[self.fruit_type]
-            left_half = cv2.flip(fruit_half[:, :Fruit_Size//2], 1)
-            right_half = fruit_half[:, Fruit_Size//2:]
+            left_half = fruit_half[:, :Fruit_Size // 2]  # Left half with alpha
+            right_half = fruit_half[:, Fruit_Size // 2:]  # Right half with alpha
 
             # Move the halves apart
             left_x = x - self.split_offset * (elapsed / self.duration)
             right_x = x + self.split_offset * (elapsed / self.duration)
 
-            img[y:y + Fruit_Size, int(left_x):int(left_x) + Fruit_Size//2] = left_half
-            img[y:y + Fruit_Size, int(right_x):int(right_x) + Fruit_Size//2] = right_half
+            # Blend the left and right halves onto the image
+            blend_images(img, left_half, (int(left_x), y))
+            blend_images(img, right_half, (int(right_x), y))
+
 
 # Show the menu before starting the game
 show_menu()
@@ -146,11 +192,14 @@ while cap.isOpened():
     results = hands.process(img)
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
+    # Overlay the background
+    combined_img = background_img.copy()  # Create a copy of the background
+
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
-            mp_drawing.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS,
-                                       mp_drawing_styles.get_default_hand_landmarks_style(),
-                                       mp_drawing_styles.get_default_hand_connections_style())
+            mp_drawing.draw_landmarks(combined_img, hand_landmarks, mp_hands.HAND_CONNECTIONS,
+                                      mp_drawing_styles.get_default_hand_landmarks_style(),
+                                      mp_drawing_styles.get_default_hand_connections_style())
             for id, lm in enumerate(hand_landmarks.landmark):
                 if id == 8:  # Index finger tip
                     index_pos = (int(lm.x * w), int(lm.y * h))
@@ -161,7 +210,8 @@ while cap.isOpened():
                             Score += 100
                             slice_sound.play()  # Play slicing sound
                             fruits_to_remove.append(fruit)  # Collect fruit to remove
-                            slicing_effects.append(SlicingEffect(fruit["Curr_position"], fruit["Type"]))  # Add slicing effect
+                            slicing_effects.append(
+                                SlicingEffect(fruit["Curr_position"], fruit["Type"]))  # Add slicing effect
 
                     # Remove collected fruits
                     for fruit in fruits_to_remove:
@@ -169,7 +219,7 @@ while cap.isOpened():
 
     # Draw slicing effects
     for effect in slicing_effects:
-        effect.draw(img)
+        effect.draw(combined_img)
 
     # Clear effects that have finished
     slicing_effects = [effect for effect in slicing_effects if time.time() - effect.start_time < effect.duration]
@@ -186,10 +236,14 @@ while cap.isOpened():
     curr_Frame = time.time()
     delta_Time = curr_Frame - prev_Frame
     FPS = int(1 / delta_Time)
-    cv2.putText(img, "FPS : " + str(FPS), (int(w * 0.82), 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 250, 0), 2)
-    cv2.putText(img, "Score: " + str(Score), (int(w * 0.35), 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 5)
-    cv2.putText(img, "Level: " + str(Difficulty_level), (int(w * 0.01), 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 150), 5)
-    cv2.putText(img, "Lives remaining : " + str(Lives), (200, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
+    # Draw HUD on combined_img
+    cv2.putText(combined_img, "FPS : " + str(FPS), (int(w * 0.82), 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 250, 0), 2)
+    cv2.putText(combined_img, "Score: " + str(Score), (int(w * 0.35), 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 5)
+    cv2.putText(combined_img, "Level: " + str(Difficulty_level), (int(w * 0.01), 90), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                (255, 0, 150), 5)
+    cv2.putText(combined_img, "Lives remaining : " + str(Lives), (200, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255),
+                2)
 
     prev_Frame = curr_Frame
 
@@ -197,13 +251,14 @@ while cap.isOpened():
         if time.time() > next_Time_to_Spawn:
             Spawn_Fruits()
             next_Time_to_Spawn = time.time() + (1 / Spawn_Rate)
-        Fruit_Movement(Fruits, Speed)
+        Fruit_Movement(Fruits, Speed, combined_img)
     else:
         game_over_sound.play()  # Play game over sound
-        cv2.putText(img, "GAME OVER", (int(w * 0.1), int(h * 0.6)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
+        cv2.putText(combined_img, "GAME OVER", (int(w * 0.1), int(h * 0.6)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255),
+                    3)
         Fruits.clear()
 
-    cv2.imshow("img", img)
+    cv2.imshow("img", combined_img)
 
     if cv2.waitKey(5) & 0xFF == ord("q"):
         break
